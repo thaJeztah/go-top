@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	for i := 0; i < 10; i++ {
+	for {
 		cpuUsage, err := calcCPUUsage()
 		if err != nil {
 			log.Fatal(err)
