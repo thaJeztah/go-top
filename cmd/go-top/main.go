@@ -3,39 +3,70 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"log"
 	"os"
 	"strconv"
 	"strings"
+	"net/http"
+	"encoding/json"
+	"log"
 	"time"
 )
 
+var (
+	prevIdleTime  uint64
+	prevTotalTime uint64
+	i int
+	stats map[string]string
+)
+
 func main() {
+	fmt.Println("Serving on http://0.0.0.0:3000")
+	go collect()
+	http.HandleFunc("/", jsonTop)
+	http.ListenAndServe(":3000", nil)
+}
+
+func collect() {
+	var err error
 	for {
-		cpuUsage, err := calcCPUUsage()
+		stats, err = getStats()
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Printf("CPUUsage:\t%6.3f %%\n", cpuUsage)
-
-		mi, err := memInfo()
-		if err != nil {
-			log.Fatal(err)
-		}
-		for _, s := range []string{"MemTotal", "MemFree", "SwapTotal", "SwapFree"} {
-			fmt.Printf("%s:\t %s\n", s, mi[s])
-		}
-		fmt.Println("------------------------------------------------")
-
 		// TODO probably should use a ticker
 		time.Sleep(time.Second)
 	}
 }
 
-var (
-	prevIdleTime  uint64
-	prevTotalTime uint64
-)
+func jsonTop(w http.ResponseWriter, r *http.Request) {
+	js, err := json.Marshal(stats)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(js)
+}
+
+func getStats() (map[string]string, error) {
+	i++
+	out := map[string]string{}
+	cpuUsage, err := calcCPUUsage()
+	if err != nil {
+		return nil, err
+	}
+	out["Sequence"] = strconv.Itoa(i)
+	out["CPUUsage"] = fmt.Sprintf("%6.3f %%", cpuUsage)
+
+	mi, err := memInfo()
+	if err != nil {
+		return nil, err
+	}
+	for _, s := range []string{"MemTotal", "MemFree", "SwapTotal", "SwapFree"} {
+		out[s] = mi[s]
+	}
+	return out, nil
+}
 
 // https://rosettacode.org/wiki/Linux_CPU_utilization#Go
 func calcCPUUsage() (cpuUsage float64, err error) {
